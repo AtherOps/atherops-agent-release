@@ -182,7 +182,7 @@ EOF
         -H "Content-Type: application/json" \
         -H "X-Registration-Key: $REGISTRATION_KEY" \
         -d "$payload" \
-        "$PORTAL_URL/api/v1/agents/register" 2>&1)
+        "$PORTAL_URL/v1/agents/register" 2>&1)
     
     local http_code=$(echo "$response" | tail -n1)
     local body=$(echo "$response" | sed '$d')
