@@ -182,7 +182,7 @@ EOF
         -H "Content-Type: application/json" \
         -H "X-Registration-Key: $REGISTRATION_KEY" \
         -d "$payload" \
-        "$PORTAL_URL/v1/agents/register" 2>&1)
+        "$PORTAL_URL/api/v1/agents/register" 2>&1)
     
     local http_code=$(echo "$response" | tail -n1)
     local body=$(echo "$response" | sed '$d')
@@ -240,44 +240,20 @@ create_config() {
     # Parse registration response using grep (more portable than jq)
     local agent_id=$(echo "$registration_data" | grep -o '"agent_id":"[^"]*"' | cut -d'"' -f4)
     local api_key=$(echo "$registration_data" | grep -o '"api_key":"[^"]*"' | cut -d'"' -f4)
-    local token=$(echo "$registration_data" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
     local metrics_url=$(echo "$registration_data" | grep -o '"metrics_endpoint":"[^"]*"' | cut -d'"' -f4)
     local interval=$(echo "$registration_data" | grep -o '"interval":"[^"]*"' | cut -d'"' -f4)
     local heartbeat_url=$(echo "$registration_data" | grep -o '"heartbeat_endpoint":"[^"]*"' | cut -d'"' -f4)
-    local server_url=$(echo "$registration_data" | grep -o '"server_url":"[^"]*"' | cut -d'"' -f4)
-    local token_expires_at=$(echo "$registration_data" | grep -o '"token_expires_at":"[^"]*"' | cut -d'"' -f4)
-    
-    # Use token if api_key is not set (they should be the same)
-    if [ -z "$api_key" ] && [ -n "$token" ]; then
-        api_key="$token"
-    fi
     
     # Set defaults if not provided
     if [ -z "$agent_id" ]; then
         agent_id=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "agent-$(date +%s)")
     fi
     interval=${interval:-"30s"}
-    metrics_url=${metrics_url:-"$PORTAL_URL/v1/ingest/prometheus"}
-    server_url=${server_url:-"$PORTAL_URL"}
+    metrics_url=${metrics_url:-"$PORTAL_URL/api/v1/metrics"}
     
     log_info "  Agent ID:       $agent_id"
     log_info "  Metrics URL:    $metrics_url"
     log_info "  Interval:       $interval"
-    
-    # Create credentials.json file for the agent
-    log_info "Creating credentials file..."
-    cat > "$DATA_DIR/credentials.json" <<EOF
-{
-  "agent_id": "$agent_id",
-  "token": "$api_key",
-  "token_version": 1,
-  "token_expires_at": "$token_expires_at",
-  "server_url": "$server_url",
-  "machine_fingerprint": ""
-}
-EOF
-    chmod 600 "$DATA_DIR/credentials.json"
-    log_info "✓ Credentials file created at $DATA_DIR/credentials.json"
     
     # Create config.yaml
     cat > "$CONFIG_DIR/config.yaml" <<EOF
@@ -286,8 +262,11 @@ EOF
 
 metrics:
   # Backend server configuration
-  server_url: "$server_url"
-  credentials_path: "$DATA_DIR/credentials.json"
+  server_url: "$metrics_url"
+  api_key: "$api_key"
+  
+  # Agent identification
+  agent_id: "$agent_id"
   
   # Collection settings
   interval: "$interval"
